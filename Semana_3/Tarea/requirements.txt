@@ -1,7 +1,8 @@
 pandas
-numpy
 matplotlib
 scikit-learn
 streamlit
 jupyter
 notebook
+streamlit
+numpy>=2.0
