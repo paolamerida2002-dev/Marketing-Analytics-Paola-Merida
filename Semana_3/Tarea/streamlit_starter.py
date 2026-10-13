@@ -78,7 +78,7 @@ df = load_data()
 # TODO: agreguen un slider en la barra lateral para el % de la base a contactar
 with st.sidebar:
     st.header("Parámetros")
-        pct_contactar = st.slider(
+    pct_contactar = st.slider(
         "Porcentaje de clientes a contactar",
         min_value=10,
         max_value=100,
