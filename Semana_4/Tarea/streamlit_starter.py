@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.decomposition import TruncatedSVD
 
 st.set_page_config(page_title="Recomendador — Laboratorio", page_icon="☕", layout="wide")
 
@@ -44,20 +45,51 @@ COL_AGUA = productos.index("Agua")
 popularidad = X.sum(axis=0)
 
 # TODO 1: la tabla de similitudes producto × producto (con la diagonal en 0), calculada UNA vez
-S_it = ...   # <-- reemplacen esto (cosine_similarity entre las columnas de X)
+# Comparamos las columnas de la matriz X, ya que cada columna representa un producto y sus compras realizadas por los clientes.
+# La similitud de coseno permite identificar productos que suelen ser comprados por clientes con comportamientos similares.
+S_it = cosine_similarity(X.T)
 
+# Eliminamos la similitud de cada producto consigo mismo, asi evitamos que influya en sus propios puntajes.
+np.fill_diagonal(S_it, 0)
+# MODELO SVD (8 FACTORES)
+svd = TruncatedSVD(n_components=8, random_state=42)
+# Calculamos los puntajes de los productos para cada cliente.
+Z = svd.fit_transform(X)
+S_libre = Z @ svd.components_
 
-def puntajes(metodo, x_vec, K):
-    """Puntajes de los 29 productos para UN cliente (x_vec = su vector de 0/1)."""
+# TODO 2 y 3: Calcular los puntajes de los productos
+# según el método de recomendación seleccionado.
+
+# Calculamos los puntajes según el método seleccionado.
+
+def puntajes(metodo, x_vec, K, fila=None):
+
+    # Popularidad: usamos los productos más comprados.
     if metodo == "Popularidad":
         return popularidad.astype(float)
+    # Filtrado por ítem: buscamos productos parecidos a los que el cliente ya compró.
     if metodo == "Filtrado por ítem":
-        # TODO 2: suma de las similitudes de cada producto con lo que el cliente ya compró
-        return ...   # <-- reemplacen esto
-    # TODO 3: filtrado por cliente: similitud del cliente con TODOS los demás, sus K vecinos más parecidos
-    #         y la suma de sus compras ponderada por esa similitud
-    sims = cosine_similarity(x_vec[None, :], X)[0]
-    return ...       # <-- reemplacen esto
+        return x_vec @ S_it
+    # Filtrado por cliente: buscamos otros clientes que tengan compras similares.
+    if metodo == "Filtrado por cliente":
+        sims = cosine_similarity(x_vec[None, :], X)[0]
+        # No incluimos al mismo cliente entre sus vecinos.
+        if fila is not None:
+            sims[fila] = -1
+
+        vecinos = np.argsort(sims)[-K:]
+        return sims[vecinos] @ X[vecinos]
+    # SVD: utilizamos los puntajes que ya calculamos.
+    if metodo == "SVD (8 factores)":
+        return S_libre[fila]
+    # Modelo final: usamos ítem si el cliente tiene compras
+    # y popularidad si todavía no tiene historial.
+    if metodo == "Final (ítem + respaldo)":
+
+        if x_vec.sum() > 0:
+            return x_vec @ S_it
+        else:
+            return popularidad.astype(float)
 
 
 def top3(scores, x_vec):
@@ -70,30 +102,197 @@ def top3(scores, x_vec):
 st.title("☕ Recomendador de productos")
 st.caption("TODO: escriban aquí una frase sobre qué decisión de negocio ayuda a tomar esta app.")
 
-# TODO 4: barra lateral con los controles interactivos (mínimo UNO): un selector del método
-#         (st.selectbox) y un slider con el número de vecinos K (st.slider)
+
+# TODO 4: Controles para elegir cómo queremos las recomendaciones.
 with st.sidebar:
-    st.header("Parámetros")
-    metodo = ...     # <-- reemplacen esto
-    K = ...          # <-- reemplacen esto
+    st.header("Opciones de recomendación")
+
+    # Elegimos el método de recomendación.
+    metodo = st.selectbox(
+        "Método de recomendación",
+        [
+            "Popularidad",
+            "Filtrado por ítem",
+            "Filtrado por cliente",
+            "SVD (8 factores)",
+            "Final (ítem + respaldo)"
+        ]
+    )
+
+    # Elegimos cuántos clientes similares vamos a tomar en cuenta.
+    K = st.slider(
+        "Número de vecinos (K)",
+        min_value=5,
+        max_value=100,
+        value=30,
+        step=5,
+        disabled=(metodo != "Filtrado por cliente")
+    )
 
 tab1, tab2 = st.tabs(["Recomendar", "Comparar métodos"])
 
+
+# TODO 5: Mostrar las recomendaciones del cliente.
 with tab1:
-    cid = st.number_input("ID de cliente", min_value=int(ids.min()), max_value=int(ids.max()), value=14, step=1)
+
+    # Elegimos el cliente que queremos consultar.
+    cid = st.selectbox("Selecciona un cliente", ids)
+
+    # Buscamos las compras que ha realizado ese cliente.
     fila = int(np.where(ids == cid)[0][0])
     x_vec = X[fila].copy()
-    st.write("Ya compró:", [productos[j] for j in np.where(x_vec > 0)[0]])
+    comprados = [productos[j] for j in np.where(x_vec > 0)[0]]
 
-    # TODO 5: muestren las 3 recomendaciones con su puntaje y, para cada una, el "porque"
-    #         - por ítem: "porque compró X (similitud 0.87)"
-    #         - por cliente: "N de sus K vecinos más parecidos lo compraron"
-    #         - popularidad: "es de lo más comprado"
-    #         (y qué hacen con un cliente SIN historial: los métodos colaborativos dan puntaje 0)
+    st.subheader(f"Recomendaciones para el cliente {cid}")
+
+    # Mostramos los productos que ya ha comprado.
+    if len(comprados) > 0:
+        st.write("Productos que ya compró:", ", ".join(comprados))
+    else:
+        st.info("Este cliente todavía no tiene compras registradas.")
+
+    # Calculamos los puntajes según el método elegido.
+    if len(comprados) == 0:
+        scores = popularidad.astype(float)
+        st.info("Como no tiene historial, recomendamos productos populares.")
+    else:
+        scores = puntajes(metodo, x_vec, K, fila)
+
+    # Elegimos los tres productos con mayor puntaje.
+    recomendaciones = top3(scores, x_vec)
+    st.subheader("Productos recomendados")
+
+    # Mostramos cada producto y explicamos por qué lo recomendamos.
+    for i, j in enumerate(recomendaciones):
+
+        producto = productos[j]
+        puntaje = scores[j]
+        if len(comprados) == 0:
+            porque = "Es uno de los productos más comprados por los clientes."
+        elif metodo == "Popularidad":
+            porque = "Es uno de los productos más populares de la cafetería."
+        elif metodo == "Filtrado por ítem":
+
+            # Buscamos cuál de sus compras se parece más al producto.
+            similares = np.where(x_vec > 0)[0]
+            mejor = similares[np.argmax(S_it[similares, j])]
+            porque = (
+                f"Porque ya compró {productos[mejor]}, "
+                f"que tiene una similitud de {S_it[mejor, j]:.2f}."
+            )
+        elif metodo == "Filtrado por cliente":
+            # Buscamos los vecinos más parecidos al cliente.
+            sims = cosine_similarity(x_vec[None, :], X)[0]
+            sims[fila] = -1
+            vecinos = np.argsort(sims)[-K:]
+            # Contamos cuántos vecinos compraron el producto.
+            cantidad = int(X[vecinos, j].sum())
+            porque = (
+                f"{cantidad} de los {K} clientes más similares "
+                f"compraron este producto."
+            )
+        # Mostramos el resultado.
+        st.markdown(f"### {i + 1}. {producto}")
+        st.write(f"**Puntaje:** {puntaje:.2f}")
+        st.write(f"**¿Por qué?** {porque}")
+        st.divider()
+        elif metodo == "SVD (8 factores)":
+
+            # SVD encuentra patrones en las compras de los clientes.
+            porque = (
+                "Lo recomendamos porque el modelo encontró "
+                "patrones de compra relacionados con este producto."
+            )
+
+        elif metodo == "Final (ítem + respaldo)":
+
+            # Si tiene historial, buscamos productos similares.
+            # Si no tiene compras, usamos los más populares.
+            porque = (
+                "Lo recomendamos tomando en cuenta "
+                "los productos que ya compró."
+            )
+
+
+# TODO 6: Comparar los métodos de recomendación.
 
 with tab2:
-    # TODO 6: tabla de comparación (hit rate@3 y cobertura de cada método) calculada sobre los clientes del grupo
-    #         CONTROL que probaron algo nuevo (NUEVO.sum(axis=1) > 0 y es_control), con al menos un control
-    #         interactivo (por ejemplo, un slider con cuántos clientes evaluar o el K del filtrado por cliente).
-    #         Pista: es la misma lógica de hit_rate_at_k del notebook.
-    st.info("Reemplacen cada TODO con su propio código. Revisen el notebook del laboratorio para la lógica exacta de cada pieza.")
+    st.subheader("Comparación de recomendadores")
+    st.write(
+        "Comparamos los métodos para ver cuáles recomiendan "
+        "mejor los productos y cuáles ofrecen más variedad."
+    )
+
+    # Usamos solo los clientes de control que probaron
+    # al menos un producto nuevo.
+    elegibles = es_control & (NUEVO.sum(axis=1) > 0)
+    filas_control = np.where(elegibles)[0]
+
+    # Elegimos cuántos clientes queremos evaluar.
+    cantidad = st.slider(
+        "Cantidad de clientes a evaluar",
+        min_value=50,
+        max_value=min(500, len(filas_control)),
+        value=min(200, len(filas_control)),
+        step=50
+    )
+
+    # Seleccionamos los primeros clientes del grupo de control.
+    muestra = filas_control[:cantidad]
+
+    # Guardamos los resultados de cada método.
+    resultados = []
+
+    # Métodos que vamos a comparar.
+    metodos = [
+        "Popularidad",
+        "Filtrado por ítem",
+        "Filtrado por cliente",
+        "SVD (8 factores)",
+        "Final (ítem + respaldo)"
+    ]
+
+
+    for nombre in metodos:
+
+        aciertos = 0
+        total_aciertos = 0
+        productos_recomendados = set()
+
+        for fila in muestra:
+
+            # Obtenemos las compras del cliente.
+            x_vec = X[fila]
+            # Calculamos las recomendaciones para este cliente.
+            scores = puntajes(nombre, x_vec, K, fila)
+        
+        # Calculamos las métricas.
+        hit_rate = aciertos / len(muestra)
+        precision = total_aciertos / (len(muestra) * 3)
+        cobertura = len(productos_recomendados)
+
+        resultados.append({
+            "Método": nombre,
+            "Hit rate@3": hit_rate,
+            "Precisión@3": precision,
+            "Cobertura": cobertura
+        })
+
+    # Creamos la tabla con los resultados.
+    tabla = pd.DataFrame(resultados).set_index("Método")
+    st.subheader("Resultados de la comparación")
+    st.dataframe(
+        tabla.style.format({
+            "Hit rate@3": "{:.2%}",
+            "Precisión@3": "{:.2%}",
+            "Cobertura": "{:.0f}"
+        }),
+        use_container_width=True
+    )
+    # Mostramos una gráfica del hit rate.
+    st.subheader("Comparación del hit rate@3")
+    st.bar_chart(tabla["Hit rate@3"])
+    st.caption(
+        "Los resultados se calculan con los clientes "
+        "seleccionados del grupo de control."
+    )
