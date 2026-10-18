@@ -16,6 +16,8 @@ from sklearn.decomposition import TruncatedSVD
 from pathlib import Path
 
 st.set_page_config(page_title="Recomendador — Laboratorio", page_icon="☕", layout="wide")
+# Revisamos si la aplicación comienza a ejecutarse.
+st.write("Prueba: Streamlit está ejecutando el código.")
 
 VERDE = "#00704A"
 NARANJA = "#C4512F"
