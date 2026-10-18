@@ -167,47 +167,41 @@ with tab1:
 
         producto = productos[j]
         puntaje = scores[j]
-        if len(comprados) == 0:
-            porque = "Es uno de los productos más comprados por los clientes."
-        elif metodo == "Popularidad":
-            porque = "Es uno de los productos más populares de la cafetería."
-        elif metodo == "Filtrado por ítem":
 
-            # Buscamos cuál de sus compras se parece más al producto.
+
+        if len(comprados) == 0:
+            porque = "Es uno de los productos más comprados."
+
+        elif metodo == "Popularidad":
+            porque = "Es uno de los productos más populares."
+
+        elif metodo == "Filtrado por ítem":
             similares = np.where(x_vec > 0)[0]
             mejor = similares[np.argmax(S_it[similares, j])]
+
             porque = (
                 f"Porque ya compró {productos[mejor]}, "
                 f"que tiene una similitud de {S_it[mejor, j]:.2f}."
             )
+
         elif metodo == "Filtrado por cliente":
-            # Buscamos los vecinos más parecidos al cliente.
             sims = cosine_similarity(x_vec[None, :], X)[0]
             sims[fila] = -1
             vecinos = np.argsort(sims)[-K:]
-            # Contamos cuántos vecinos compraron el producto.
             cantidad = int(X[vecinos, j].sum())
+
             porque = (
                 f"{cantidad} de los {K} clientes más similares "
                 f"compraron este producto."
             )
-        # Mostramos el resultado.
-        st.markdown(f"### {i + 1}. {producto}")
-        st.write(f"**Puntaje:** {puntaje:.2f}")
-        st.write(f"**¿Por qué?** {porque}")
-        st.divider()
-        elif metodo == "SVD (8 factores)":
 
-            # SVD encuentra patrones en las compras de los clientes.
+        elif metodo == "SVD (8 factores)":
             porque = (
                 "Lo recomendamos porque el modelo encontró "
                 "patrones de compra relacionados con este producto."
             )
 
         elif metodo == "Final (ítem + respaldo)":
-
-            # Si tiene historial, buscamos productos similares.
-            # Si no tiene compras, usamos los más populares.
             porque = (
                 "Lo recomendamos tomando en cuenta "
                 "los productos que ya compró."
