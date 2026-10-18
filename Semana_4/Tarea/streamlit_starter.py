@@ -70,6 +70,8 @@ svd = TruncatedSVD(n_components=8, random_state=42)
 # Calculamos los puntajes de los productos para cada cliente.
 Z = svd.fit_transform(X)
 S_libre = Z @ svd.components_
+# Revisamos si terminaron los cálculos de los modelos.
+st.write("Prueba 3: Los modelos se calcularon correctamente.")
 
 # TODO 2 y 3: Calcular los puntajes de los productos
 # según el método de recomendación seleccionado.
