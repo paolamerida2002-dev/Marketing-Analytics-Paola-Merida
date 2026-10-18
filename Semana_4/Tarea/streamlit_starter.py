@@ -53,6 +53,8 @@ def cargar():
 
 
 productos, ids, X, NUEVO, es_control = cargar()
+# Revisamos si los datos se cargaron correctamente.
+st.write("Prueba 2: Los datos se cargaron correctamente.")
 COL_AGUA = productos.index("Agua")
 popularidad = X.sum(axis=0)
 
